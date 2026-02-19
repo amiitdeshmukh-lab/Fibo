@@ -1,13 +1,18 @@
 const keys = require('./keys');
 const redis = require('redis');
 
-// Create a Redis client and a duplicate for subscription
+// Create a Redis client and a duplicate for subscription (redis v5+)
 const redisClient = redis.createClient({
-  host: keys.redisHost,
-  port: keys.redisPort,
-  retry_strategy: () => 1000
+  socket: {
+    host: keys.redisHost,
+    port: keys.redisPort,
+    reconnectStrategy: () => 1000,
+  },
 });
+redisClient.on('error', (err) => console.error('Redis client error', err));
+
 const sub = redisClient.duplicate();
+sub.on('error', (err) => console.error('Redis subscriber error', err));
 
 // Fibonacci calculation function
 function fib(index) {
@@ -16,9 +21,25 @@ function fib(index) {
 }
 
 // Subscribe to 'insert' events and compute/store Fibonacci
-sub.on('message', (channel, message) => {
-  const result = fib(parseInt(message));
-  redisClient.hset('values', message, result);
-});
+(async () => {
+  try {
+    if (!redisClient.isOpen) {
+      await redisClient.connect();
+    }
+    if (!sub.isOpen) {
+      await sub.connect();
+    }
 
-sub.subscribe('insert');
+    await sub.subscribe('insert', async (message) => {
+      const index = parseInt(message, 10);
+      if (Number.isNaN(index)) {
+        return;
+      }
+
+      const result = fib(index);
+      await redisClient.hSet('values', message, result);
+    });
+  } catch (err) {
+    console.error('Failed to initialize Redis subscription', err);
+  }
+})();

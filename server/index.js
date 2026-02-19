@@ -25,14 +25,28 @@ pgClient.on('error', ()=>console.log('LOST PG CONNECTION'));
 pgClient.query('CREATE TABLE IF NOT EXISTS values (number INT)')
     .catch(err => console.log(err));
 
-//Redis Client setuo
+//Redis Client setup (redis v5+)
 const redis = require('redis');
 const redisClient = redis.createClient({
-    host: keys.redisHost,
-    port: keys.redisPort,
-    retry_strategy: ()=>1000
+    socket: {
+        host: keys.redisHost,
+        port: keys.redisPort,
+        reconnectStrategy: () => 1000
+    }
 });
+redisClient.on('error', (err) => console.error('Redis client error', err));
+
 const redisPublisher = redisClient.duplicate();
+redisPublisher.on('error', (err) => console.error('Redis publisher error', err));
+
+const redisReady = (async () => {
+    if (!redisClient.isOpen) {
+        await redisClient.connect();
+    }
+    if (!redisPublisher.isOpen) {
+        await redisPublisher.connect();
+    }
+})();
 
 //Express route handlers
 
@@ -47,9 +61,14 @@ app.get('/values/all', async (req, res)=>{
 });
 
 app.get('/values/current', async (req, res)=>{
-    redisClient.hgetall('values',(err, values)=>{
-        res.send(values);
-    });
+    try {
+        await redisReady;
+        const values = await redisClient.hGetAll('values');
+        res.send(values || {});
+    } catch (err) {
+        console.error('Failed to fetch current values from Redis', err);
+        res.status(500).send({ error: 'Unable to fetch current values' });
+    }
 });
 
 app.post('/values', async(req, res)=>{
@@ -59,13 +78,28 @@ app.post('/values', async(req, res)=>{
         return res.status(422).send('Index too high');
     }
 
-    redisClient.hset('values', index, 'Nothing yet!')
-    redisPublisher.publish('insert', index);
-    pgClient.query('INSERT INTO values(number) VALUES($1)', [index])
-    res.send({working:true});
+    try {
+        await redisReady;
+        await redisClient.hSet('values', index, 'Nothing yet!');
+        await redisPublisher.publish('insert', index);
+        pgClient.query('INSERT INTO values(number) VALUES($1)', [index]);
+        res.send({working:true});
+    } catch (err) {
+        console.error('Failed to store value', err);
+        res.status(500).send({ error: 'Unable to store value' });
+    }
 
 });
 
-app.listen(5000, err =>{
-    console.log('Listening');
-});
+const startServer = async () => {
+    try {
+        await redisReady;
+        app.listen(5000, () => {
+            console.log('Listening');
+        });
+    } catch (err) {
+        console.error('Failed to start server', err);
+    }
+};
+
+startServer();
