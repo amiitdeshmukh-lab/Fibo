@@ -14,7 +14,7 @@ redisClient.on('error', (err) => console.error('Redis client error', err));
 const sub = redisClient.duplicate();
 sub.on('error', (err) => console.error('Redis subscriber error', err));
  
-const fib = require("./fib")
+const fib = require("./fib");
 
 // Subscribe to 'insert' events and compute/store Fibonacci
 (async () => {
