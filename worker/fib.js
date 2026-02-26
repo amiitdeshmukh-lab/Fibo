@@ -9,4 +9,5 @@ function fib(index) {
   return b;
 }
 
+
 module.exports = fib;
