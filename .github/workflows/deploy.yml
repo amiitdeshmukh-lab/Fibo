@@ -53,6 +53,12 @@ jobs:
           username: ${{secrets.EC2_USER}}
           key: ${{secrets.EC2_SSH_KEY}}
           script: |
+            # Upgrade docker-compose if needed
+            if ! docker-compose version | grep -q "v2"; then
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
             cd ~/app
+            docker-compose down --remove-orphans
             docker-compose pull
             docker-compose up -d
