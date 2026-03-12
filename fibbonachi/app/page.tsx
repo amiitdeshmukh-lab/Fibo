@@ -77,7 +77,7 @@ export default function Home() {
             type="submit"
             className="mt-2 py-3 px-6 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold shadow-md hover:from-blue-600 hover:to-purple-600 transition"
           >
-            Calculate
+            Calculator
           </button>
         </form>
 
